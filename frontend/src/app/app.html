@@ -1,0 +1,381 @@
+<div class="app-shell">
+  <aside class="sidebar">
+    <a class="brand" href="#" (click)="view.set('home'); $event.preventDefault()">
+      <span class="brand-mark">F</span>
+      <span>fitsync<span class="brand-dot">.</span></span>
+    </a>
+
+    <div class="sidebar-label">MENÚ</div>
+    <nav class="main-nav" aria-label="Navegación principal">
+      <button
+        class="nav-link"
+        [class.active]="view() === 'home' && !activeWorkout()"
+        (click)="view.set('home'); showExercisePicker.set(false)"
+      >
+        <span class="nav-icon">⌂</span> Resumen
+      </button>
+      <button
+        class="nav-link"
+        [class.active]="view() === 'history' && !activeWorkout()"
+        (click)="view.set('history'); showExercisePicker.set(false)"
+      >
+        <span class="nav-icon">◷</span> Historial
+      </button>
+      <button
+        class="nav-link"
+        [class.active]="!!activeWorkout()"
+        [disabled]="!activeWorkout()"
+        (click)="showExercisePicker.set(false)"
+      >
+        <span class="nav-icon">＋</span> Sesión activa
+        @if (activeWorkout()) {
+          <span class="active-indicator"></span>
+        }
+      </button>
+    </nav>
+
+    <div class="sidebar-bottom">
+      <div class="privacy-note">
+        <span class="privacy-icon">◈</span>
+        <div>
+          <strong>Tus datos, tuyos</strong>
+          <p>En esta primera versión se guardan en este dispositivo.</p>
+        </div>
+      </div>
+      <div class="profile-chip">
+        <span class="avatar">FS</span>
+        <span><strong>Mi espacio</strong><small>Entrenamiento personal</small></span>
+      </div>
+    </div>
+  </aside>
+
+  <main class="main-content">
+    <header class="topbar">
+      <div class="breadcrumb"><span>FitSync</span><span class="breadcrumb-separator">/</span>
+        <strong>{{ activeWorkout() ? 'Entrenamiento en curso' : view() === 'history' ? 'Historial' : 'Resumen' }}</strong>
+      </div>
+      <span class="local-badge"><span class="status-dot"></span> Guardado en este dispositivo</span>
+    </header>
+
+    @if (storageError()) {
+      <div class="storage-alert" role="alert">
+        <div>
+          <strong>No se pudo guardar el cambio</strong>
+          <p>{{ storageError() }}</p>
+        </div>
+        @if (storageError()?.includes('datos guardados')) {
+          <button class="button button-quiet" (click)="workoutStore.clearLocalData()">Borrar datos locales</button>
+        }
+      </div>
+    }
+
+    @if (activeWorkout()) {
+      <section class="page-wrap workout-page">
+        @if (showExercisePicker()) {
+          <div class="page-heading compact-heading">
+            <div>
+              <button class="back-link" (click)="showExercisePicker.set(false)">← Volver a la sesión</button>
+              <p class="eyebrow">AÑADIR MOVIMIENTO</p>
+              <h1>¿Qué vas a entrenar?</h1>
+              <p class="page-description">Elige un ejercicio o escribe uno propio.</p>
+            </div>
+          </div>
+          <div class="picker-card">
+            <label class="search-field">
+              <span class="search-icon">⌕</span>
+              <input
+                type="search"
+                placeholder="Buscar ejercicio"
+                [ngModel]="exerciseSearch()"
+                (ngModelChange)="exerciseSearch.set($event)"
+              />
+            </label>
+            <div class="exercise-options">
+              @for (exercise of filteredExercises(); track exercise) {
+                <button class="exercise-option" (click)="addExercise(exercise)">
+                  <span class="exercise-option-icon">＋</span>
+                  <span>{{ exercise }}</span>
+                  <span class="option-arrow">→</span>
+                </button>
+              } @empty {
+                <p class="empty-search">No encontramos ejercicios con ese nombre. Añádelo abajo.</p>
+              }
+            </div>
+            <form class="custom-exercise" (ngSubmit)="addCustomExercise()">
+              <label for="custom-exercise-name">¿Falta un ejercicio?</label>
+              <div class="custom-exercise-row">
+                <input
+                  id="custom-exercise-name"
+                  name="customExerciseName"
+                  placeholder="Nombre del ejercicio"
+                  [ngModel]="customExerciseName()"
+                  (ngModelChange)="customExerciseName.set($event)"
+                  required
+                />
+                <button class="button button-dark" type="submit">Crear ejercicio</button>
+              </div>
+            </form>
+          </div>
+        } @else {
+          <div class="page-heading workout-heading">
+            <div>
+              <button class="back-link" (click)="view.set('home')">← Volver al resumen</button>
+              <p class="eyebrow"><span class="status-dot"></span> SESIÓN EN CURSO</p>
+              <input
+                class="workout-title-input"
+                aria-label="Nombre del entrenamiento"
+                [ngModel]="activeWorkout()!.name"
+                (ngModelChange)="updateWorkoutName($event)"
+              />
+              <p class="page-description">Tu sesión se guarda automáticamente en este dispositivo.</p>
+            </div>
+            <button class="button button-danger-quiet" (click)="discardWorkout()">Descartar sesión</button>
+          </div>
+
+          <div class="session-meta">
+            <div><span class="meta-icon">◷</span><span>Comenzaste {{ activeWorkout()!.startedAt | date:'shortTime' }}</span></div>
+            <div><span class="meta-icon">▤</span><span>{{ activeWorkout()!.exercises.length }} {{ activeWorkout()!.exercises.length === 1 ? 'ejercicio' : 'ejercicios' }}</span></div>
+            <div><span class="meta-icon">↗</span><span>{{ totalWorkoutSets(activeWorkout()!) }} series</span></div>
+          </div>
+
+          <div class="section-title-row">
+            <div>
+              <h2>Tu entrenamiento</h2>
+              <p>Registra las repeticiones y el peso de cada serie.</p>
+            </div>
+            <button class="button button-outline" (click)="showExercisePicker.set(true)">＋ Añadir ejercicio</button>
+          </div>
+
+          @for (exercise of activeWorkout()!.exercises; track exercise.id; let exerciseIndex = $index) {
+            <article class="exercise-card">
+              <div class="exercise-card-heading">
+                <div class="exercise-name-wrap">
+                  <span class="exercise-number">{{ (exerciseIndex + 1).toString().padStart(2, '0') }}</span>
+                  <h3>{{ exercise.name }}</h3>
+                </div>
+                <button
+                  class="icon-button"
+                  [attr.aria-label]="'Eliminar ' + exercise.name"
+                  title="Eliminar ejercicio"
+                  (click)="workoutStore.removeExercise(exercise.id)"
+                >×</button>
+              </div>
+              <div class="set-table">
+                <div class="set-row set-header">
+                  <span>SERIE</span><span>REPETICIONES</span><span>PESO (KG)</span><span></span>
+                </div>
+                @for (set of exercise.sets; track set.id; let setIndex = $index) {
+                  <div class="set-row">
+                    <span class="set-index">{{ (setIndex + 1).toString().padStart(2, '0') }}</span>
+                    <label class="number-field">
+                      <input
+                        type="number"
+                        min="1"
+                        max="999"
+                        [attr.aria-label]="'Repeticiones de la serie ' + (setIndex + 1)"
+                        [ngModel]="set.reps"
+                        (ngModelChange)="updateSet(exercise.id, set.id, 'reps', $event)"
+                      />
+                      <span>reps</span>
+                    </label>
+                    <label class="number-field">
+                      <input
+                        type="number"
+                        min="0"
+                        max="999"
+                        step="0.5"
+                        [attr.aria-label]="'Peso en kilogramos de la serie ' + (setIndex + 1)"
+                        [ngModel]="set.weightKg"
+                        (ngModelChange)="updateSet(exercise.id, set.id, 'weightKg', $event)"
+                      />
+                      <span>kg</span>
+                    </label>
+                    <span class="set-check">{{ set.reps !== null ? '✓' : '' }}</span>
+                  </div>
+                }
+              </div>
+              <button class="add-set-button" (click)="workoutStore.addSet(exercise.id)">＋ Añadir serie</button>
+            </article>
+          } @empty {
+            <div class="empty-state exercise-empty">
+              <span class="empty-illustration">↗</span>
+              <h3>Empieza por añadir un ejercicio</h3>
+              <p>Elige un movimiento y registra tus repeticiones y peso.</p>
+              <button class="button button-dark" (click)="showExercisePicker.set(true)">＋ Añadir ejercicio</button>
+            </div>
+          }
+
+          @if (activeWorkout()!.exercises.length > 0) {
+            <div class="notes-card">
+              <label for="workout-notes">Notas de la sesión <span>OPCIONAL</span></label>
+              <textarea
+                id="workout-notes"
+                rows="3"
+                placeholder="¿Cómo te sentiste? Añade una nota para recordar esta sesión."
+                [ngModel]="activeWorkout()!.notes"
+                (ngModelChange)="updateNotes($event)"
+              ></textarea>
+            </div>
+            <div class="finish-panel">
+              <div><strong>¿Terminaste por hoy?</strong><p>Tu entrenamiento quedará guardado en el historial.</p></div>
+              <button class="button button-primary finish-button" (click)="finishWorkout()">Finalizar entrenamiento <span>→</span></button>
+            </div>
+            @if (validationError()) {
+              <p class="form-error" role="alert">{{ validationError() }}</p>
+            }
+          }
+        }
+      </section>
+    } @else if (view() === 'history') {
+      <section class="page-wrap">
+        <div class="page-heading">
+          <div>
+            <p class="eyebrow">TU CONSTANCIA</p>
+            <h1>Historial de entrenamientos</h1>
+            <p class="page-description">Cada sesión cuenta. Aquí tienes todo lo que has registrado.</p>
+          </div>
+          <button class="button button-primary" (click)="startWorkout()">＋ Nuevo entrenamiento</button>
+        </div>
+
+        @if (sessions().length > 0) {
+          <div class="history-list">
+            @for (session of sessions(); track session.id) {
+              <article class="history-card">
+                <div class="history-date">
+                  <span class="history-day">{{ session.startedAt | date:'dd' }}</span>
+                  <span>{{ session.startedAt | date:'MMM':'':'es' }}</span>
+                </div>
+                <div class="history-main">
+                  <div class="history-title-row">
+                    <h2>{{ session.name }}</h2>
+                    <span class="completed-tag"><span>✓</span> Completado</span>
+                  </div>
+                  <p class="history-subtitle">{{ session.startedAt | date:'EEEE, d MMMM':'':'es' }}</p>
+                  <div class="history-stats">
+                    <span>◷ {{ workoutDuration(session) }} min</span>
+                    <span>▤ {{ totalWorkoutSets(session) }} series</span>
+                    <span>↗ {{ exerciseCountLabel(session) }}</span>
+                    @if (totalWorkoutVolume(session) > 0) {
+                      <span>◉ {{ totalWorkoutVolume(session) | number:'1.0-1' }} kg de volumen</span>
+                    }
+                  </div>
+                  @if (session.notes) {
+                    <p class="history-notes">“{{ session.notes }}”</p>
+                  }
+                  <details class="history-details">
+                    <summary>Ver ejercicios y series</summary>
+                    <div class="history-exercises">
+                      @for (exercise of session.exercises; track exercise.id) {
+                        <div class="history-exercise">
+                          <strong>{{ exercise.name }}</strong>
+                          <div>
+                            @for (set of exercise.sets; track set.id; let last = $last) {
+                              <span>{{ exerciseSetLabel(set) }}@if (!last) {<span> · </span>}</span>
+                            }
+                          </div>
+                        </div>
+                      }
+                    </div>
+                  </details>
+                </div>
+              </article>
+            }
+          </div>
+        } @else {
+          <div class="empty-state history-empty">
+            <span class="empty-illustration">◷</span>
+            <h2>Tu historial empieza aquí</h2>
+            <p>Cuando completes tu primer entrenamiento, lo encontrarás en esta lista.</p>
+            <button class="button button-dark" (click)="startWorkout()">＋ Registrar mi primer entrenamiento</button>
+          </div>
+        }
+      </section>
+    } @else {
+      <section class="page-wrap">
+        <div class="welcome-row">
+          <div>
+            <p class="eyebrow">{{ 'HOY, ' + (today | date:'EEEE d MMMM' | uppercase) }}</p>
+            <h1>Tu progreso, <span>a tu ritmo.</span></h1>
+            <p class="page-description">Un paso a la vez. Cada entrenamiento te acerca a tu objetivo.</p>
+          </div>
+          <span class="welcome-mark" aria-hidden="true">✳</span>
+        </div>
+
+        <section class="start-card">
+          <div class="start-card-copy">
+            <span class="start-kicker"><span class="pulse-dot"></span> TU PRÓXIMO ENTRENAMIENTO</span>
+            <h2>¿Listo para empezar?</h2>
+            <p>Registra tus ejercicios, series y repeticiones en un solo lugar.</p>
+            <form class="start-form" (ngSubmit)="startWorkout()">
+              <label class="visually-hidden" for="workout-name">Nombre del entrenamiento (opcional)</label>
+              <input
+                id="workout-name"
+                name="workoutName"
+                placeholder="Nombre (por ejemplo, Día de piernas)"
+                [ngModel]="workoutName()"
+                (ngModelChange)="workoutName.set($event)"
+              />
+              <button class="button button-primary" type="submit">Empezar entrenamiento <span>→</span></button>
+            </form>
+          </div>
+          <div class="start-card-art" aria-hidden="true">
+            <div class="art-ring art-ring-one"></div>
+            <div class="art-ring art-ring-two"></div>
+            <span class="art-dumbbell">✳</span>
+            <span class="art-caption">FUERZA<br />Y CONSTANCIA</span>
+          </div>
+        </section>
+
+        <section class="stats-grid" aria-label="Resumen de actividad">
+          <article class="stat-card">
+            <span class="stat-icon green-icon">↗</span>
+            <span class="stat-label">Esta semana</span>
+            <strong>{{ thisWeekCount() }} <small>sesiones</small></strong>
+            <span class="stat-footnote">Entrenamientos completados</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon lilac-icon">◷</span>
+            <span class="stat-label">Este mes</span>
+            <strong>{{ thisMonthCount() }} <small>sesiones</small></strong>
+            <span class="stat-footnote">Un día a la vez</span>
+          </article>
+          <article class="stat-card">
+            <span class="stat-icon peach-icon">▤</span>
+            <span class="stat-label">Series registradas</span>
+            <strong>{{ totalSets() }} <small>series</small></strong>
+            <span class="stat-footnote">A lo largo de tus sesiones</span>
+          </article>
+        </section>
+
+        <section class="recent-section">
+          <div class="section-title-row">
+            <div><h2>Entrenamientos recientes</h2><p>Tu esfuerzo, día tras día.</p></div>
+            @if (sessions().length > 0) {
+              <button class="text-link" (click)="view.set('history')">Ver todo <span>→</span></button>
+            }
+          </div>
+          @if (recentSessions().length > 0) {
+            <div class="recent-list">
+              @for (session of recentSessions(); track session.id) {
+                <article class="recent-item">
+                  <span class="recent-icon">↗</span>
+                  <div class="recent-item-copy">
+                    <strong>{{ session.name }}</strong>
+                    <span>{{ session.startedAt | date:'d MMM, y':'':'es' }} · {{ exerciseCountLabel(session) }}</span>
+                  </div>
+                  <span class="recent-duration">{{ workoutDuration(session) }} min</span>
+                </article>
+              }
+            </div>
+          } @else {
+            <div class="recent-empty">
+              <span class="recent-empty-mark">✳</span>
+              <div><strong>Tu primera sesión te espera</strong><p>Cuando termines un entrenamiento, aparecerá aquí.</p></div>
+            </div>
+          }
+        </section>
+        <p class="prototype-note"><span>◈</span> Versión inicial: tus entrenamientos se guardan solo en este dispositivo. La sincronización en la nube llegará más adelante.</p>
+      </section>
+    }
+  </main>
+</div>

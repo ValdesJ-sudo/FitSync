@@ -1,0 +1,11 @@
+node_modules/
+dist/
+.angular/
+__pycache__/
+.venv/
+.pytest_cache/
+.env
+.env.*
+!.env.example
+.DS_Store
+supabase/.temp/
